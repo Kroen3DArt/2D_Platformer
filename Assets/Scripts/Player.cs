@@ -5,14 +5,21 @@ using System.Collections;
 [RequireComponent(typeof(Renderer), typeof(Rigidbody2D), typeof(Animator))]
 public class Player : MonoBehaviour
 {
-    private float _blinkDuration = 0.2f;
+    public int _health;
+    private int _maxHealth = 100;
+    private int _minHealth = 0;
+    private float _blinkDuration = 0.3f;
     private int _blinkCount = 5;
+    private bool _isDamaged = false;
+    private float _kickBackForce = 5f;
+    private bool _isInvulnerable = false;
     private Animator _animator;
     private Coroutine _blinkCoroutine;
     private Rigidbody2D _rigidbody;
-    private bool _isDamaged = false;
-    private float _kickBackForce = 5f;
     private Renderer _renderer;
+    private Enemy _enemy;
+    private Traps _traps;
+    private AidHeart _aidHeart;
 
     public event Action ResourcePickUp;
 
@@ -22,31 +29,59 @@ public class Player : MonoBehaviour
     {
         _renderer = GetComponent<Renderer>();
         _rigidbody = GetComponent<Rigidbody2D>();
-        Colectable = 0;
         _animator = GetComponent<Animator>();
+        _enemy = GetComponent<Enemy>();
+        _traps = GetComponent<Traps>();
+        _aidHeart = GetComponent<AidHeart>();
+    }
+
+    private void Start()
+    {
+        Colectable = 0;
+        _health = _maxHealth;
     }
 
     public void OnTriggerEnter2D(Collider2D collision)
     {
-        if (collision.GetComponent<Cherry>())
+        if (collision.TryGetComponent(out Cherry cherry))
         {
             Colectable++;
             ResourcePickUp?.Invoke();
         }
-
-        if (collision.GetComponent<Traps>() || collision.GetComponent<EnemyMover>())
+        else if (collision.TryGetComponent(out _traps))
         {
-            TakeDamage();
+            TakeDamage(_traps.Damage);
+        }
+        else if (collision.TryGetComponent(out _enemy))
+        {
+            TakeDamage(_enemy.Damage);
+        }
+        else if (collision.TryGetComponent(out _aidHeart))
+        {
+            if (_health < _maxHealth)
+            {
+                AddHealth(_aidHeart.Aid);
+                _aidHeart.Destroy();
+            }
         }
     }
 
-    private void TakeDamage()
+    private void TakeDamage(int damage)
     {
         if (_blinkCoroutine != null)
             StopCoroutine(_blinkCoroutine);
 
-        _animator.SetBool("isDamaged", !_isDamaged);
-        _rigidbody.velocity = new Vector2(_rigidbody.velocity.x, _kickBackForce);
+        if (!_isInvulnerable)
+        {
+            _animator.SetBool("isDamaged", !_isDamaged);
+            _rigidbody.velocity = new Vector2(_rigidbody.velocity.x, _kickBackForce);
+
+            if (damage > 0)
+                _health -= damage;
+
+            if (_health <= _minHealth)
+                Die();
+        }
 
         _blinkCoroutine = StartCoroutine(BlinkCorutine());
     }
@@ -54,6 +89,7 @@ public class Player : MonoBehaviour
     private IEnumerator BlinkCorutine()
     {
         WaitForSeconds wait = new(_blinkDuration);
+        _isInvulnerable = true;
 
         for (int i = 0; i < _blinkCount; i++)
         {
@@ -63,5 +99,22 @@ public class Player : MonoBehaviour
 
         _animator.SetBool("isDamaged", _isDamaged);
         _renderer.enabled = true;
+        _isInvulnerable = false;
+    }
+
+    private void Die()
+    {
+        Debug.Log("Ћ€гух погиб");
+    }
+
+    private void AddHealth(int aid)
+    {
+        if (aid > 0)
+        {
+            _health += aid;
+
+            if (_health > _maxHealth)
+                _health = _maxHealth;
+        }
     }
 }
